@@ -8,11 +8,7 @@ import javax.servlet.http.HttpServletRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.hzero.core.util.Results;
-import org.hzero.core.util.TokenUtils;
-import org.hzero.fragment.config.FragmentConfig;
-import org.hzero.fragment.service.FragmentService;
-import org.hzero.mybatis.helper.DataSecurityHelper;
+import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -21,7 +17,13 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.ModelAndView;
 
 import io.choerodon.swagger.annotation.Permission;
-import io.swagger.annotations.ApiOperation;
+
+import org.hzero.core.base.TokenConstants;
+import org.hzero.core.util.Results;
+import org.hzero.core.util.TokenUtils;
+import org.hzero.fragment.config.FragmentConfig;
+import org.hzero.fragment.service.FragmentService;
+import org.hzero.mybatis.helper.DataSecurityHelper;
 
 /**
  * 分片上传相关接口
@@ -47,6 +49,7 @@ public class FragmentController {
                 params.put(k, v[0]);
             }
         });
+        modelAndView.addObject("authHeaderName", TokenConstants.HEADER_AUTH);
         modelAndView.addObject("accessToken", TokenUtils.getToken());
         modelAndView.addObject("organizationId", organizationId);
         modelAndView.addObject("gatewayPath", fragmentConfig.getGatewayPath());

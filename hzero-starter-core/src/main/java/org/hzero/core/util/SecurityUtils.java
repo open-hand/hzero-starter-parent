@@ -10,7 +10,7 @@ import org.apache.commons.lang3.StringUtils;
 public class SecurityUtils {
 
     /**
-     * 防止CSV注入，替换 <i>+、-、=、@</i> 等特殊字符，加上 <i>\t</i> 制表符
+     * 防止CSV注入，替换 <i>+、-、=、@</i> 等特殊字符，加上 <i>`</i> 前缀
      * 
      * @param str 替换的字符串
      * @return 处理后的字符串
@@ -21,16 +21,16 @@ public class SecurityUtils {
         }
 
         if (str.startsWith("+")) {
-            str = StringUtils.replace(str, "+", "'+");
+            str = StringUtils.replaceFirst(str, "+", "'+");
         }
         else if (str.startsWith("=")) {
-            str = StringUtils.replace(str, "=", "'=");
+            str = StringUtils.replaceFirst(str, "=", "'=");
         }
         else if (str.startsWith("-")) {
-            str = StringUtils.replace(str, "-", "'-");
+            str = StringUtils.replaceFirst(str, "-", "'-");
         }
         else if (str.startsWith("@")) {
-            str = StringUtils.replace(str, "@", "'@");
+            str = StringUtils.replaceFirst(str, "@", "'@");
         }
 
         return str;

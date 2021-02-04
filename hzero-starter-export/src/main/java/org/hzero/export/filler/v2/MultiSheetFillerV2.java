@@ -1,22 +1,34 @@
 package org.hzero.export.filler.v2;
 
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.reflect.FieldUtils;
-import org.apache.poi.xssf.streaming.SXSSFCell;
-import org.apache.poi.xssf.streaming.SXSSFRow;
-import org.apache.poi.xssf.streaming.SXSSFSheet;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
-import org.hzero.export.exporter.ExcelExporter;
-import org.hzero.export.vo.ExportColumn;
-import org.springframework.util.Assert;
-
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.poi.ss.usermodel.DataValidation;
+import org.apache.poi.ss.usermodel.DataValidationConstraint;
+import org.apache.poi.ss.usermodel.DataValidationHelper;
+import org.apache.poi.ss.util.CellRangeAddressList;
+import org.apache.poi.xssf.streaming.SXSSFCell;
+import org.apache.poi.xssf.streaming.SXSSFRow;
+import org.apache.poi.xssf.streaming.SXSSFSheet;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFDataValidation;
+import org.hzero.boot.platform.lov.adapter.LovAdapter;
+import org.hzero.boot.platform.lov.dto.LovValueDTO;
+import org.hzero.core.base.BaseConstants;
+import org.hzero.export.exporter.ExcelExporter;
+import org.hzero.export.vo.ExportColumn;
+import org.springframework.util.Assert;
+
+import io.choerodon.core.convertor.ApplicationContextHelper;
+import io.choerodon.core.oauth.CustomUserDetails;
+import io.choerodon.core.oauth.DetailsHelper;
 
 /**
  * 多Sheet导出
@@ -54,7 +66,7 @@ public class MultiSheetFillerV2 extends ExcelFillerV2 {
                 .collect(Collectors.toList());
         // 处理每行数据
         for (int i = 0, len = data.size(); i < len; i++) {
-            Assert.isTrue(sheet.getLastRowNum() < ExcelExporter.MAX_ROW, "export.too-many-data");
+            Assert.isTrue(sheet.getLastRowNum() < singleSheetMaxRow, "export.too-many-data");
             SXSSFRow row = sheet.createRow(sheet.getLastRowNum() + 1);
             // 行数据
             fillRow(sheet.getWorkbook(), row, exportClass.getExcelSheet().colOffset(), parentData, parentColumns, data.get(i), exportClass.getChildren());
@@ -105,7 +117,8 @@ public class MultiSheetFillerV2 extends ExcelFillerV2 {
         int cells = 0;
         for (ExportColumn column : columns) {
             if (column.isChecked() && !column.getExcelColumn().child()) {
-                SXSSFCell cell = titleRow.createCell(colOffset + cells);
+                int index = colOffset + cells;
+                SXSSFCell cell = titleRow.createCell(index);
                 cell.setCellStyle(titleCellStyle);
                 // 值
                 fillCellValue(sheet.getWorkbook(), cell, column.getTitle(), Collections.emptyList(), column.getExcelColumn(), true);
@@ -113,6 +126,8 @@ public class MultiSheetFillerV2 extends ExcelFillerV2 {
                 // 宽度
                 setCellWidth(sheet, column.getType(), colOffset + cells, column.getExcelColumn().width());
 
+                // 设置值集下拉选项
+                setOptions(sheet, column, rowOffset + 1, index);
                 cells++;
             }
         }

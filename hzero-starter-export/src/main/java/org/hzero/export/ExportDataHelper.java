@@ -149,7 +149,7 @@ public class ExportDataHelper {
                 } else {
                     try {
                         fillSheet(data, excelExporter, pageRequest);
-                        while (pageRequest.getPage() < data.getTotalPages()) {
+                        while (pageRequest.getPage() < data.getTotalPages() - 1) {
                             pageRequest.setPage(pageRequest.getPage() + 1);
                             data = (Page<?>) requestData(target, method, args);
                             fillSheet(data, excelExporter, pageRequest);

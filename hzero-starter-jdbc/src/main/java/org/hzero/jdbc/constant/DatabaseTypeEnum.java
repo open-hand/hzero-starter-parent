@@ -42,13 +42,15 @@ public enum DatabaseTypeEnum {
     }
 
     public static DatabaseTypeEnum valueOf2(String arg) {
-        switch (arg) {
-            case QueryConstants.Datasource.DB_MSSQL:
+        switch (arg.toUpperCase()) {
+            case "SQLSERVER":
                 return SQLSERVER;
-            case QueryConstants.Datasource.DB_ORACLE:
+            case "ORACLE":
                 return ORACLE;
-            case QueryConstants.Datasource.DB_TIDB:
-            case QueryConstants.Datasource.DB_MYSQL:
+            case "HIVE":
+                return HIVE;
+            case "TIDB":
+            case "MYSQL":
             default:
                 return MYSQL;
         }

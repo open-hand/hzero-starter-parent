@@ -30,6 +30,7 @@ import io.choerodon.core.exception.CommonException;
 import io.choerodon.core.oauth.CustomTokenConverter;
 import io.choerodon.core.oauth.CustomUserDetails;
 
+import org.hzero.core.base.TokenConstants;
 import org.hzero.websocket.config.WebSocketConfig;
 import org.hzero.websocket.constant.WebSocketConstant;
 import org.hzero.websocket.helper.SocketMessageHandler;
@@ -170,7 +171,7 @@ public class DefaultSocketHandler implements SocketHandler {
      */
     public static CustomUserDetails getAuthentication(String token, String oauthUrl) {
         HttpHeaders headers = new HttpHeaders();
-        headers.set(HttpHeaders.AUTHORIZATION, "bearer " + token);
+        headers.set(TokenConstants.HEADER_AUTH, "bearer " + token);
         HttpEntity<String> entity = new HttpEntity<>("parameters", headers);
         RestTemplate restTemplate = (RestTemplate) ApplicationContextHelper.getContext().getBean("restTemplate");
         ResponseEntity<Map<String, Object>> responseEntity = restTemplate.exchange(oauthUrl + "?access_token=" + token, HttpMethod.GET, entity, new ParameterizedTypeReference<Map<String, Object>>() {

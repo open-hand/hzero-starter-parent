@@ -9,6 +9,7 @@
         <version>1.4.0.RELEASE</version>
     </parent>
     <artifactId>hzero-starter-feign-replay</artifactId>
+    <version>1.4.1.RELEASE</version>
 
     <properties>
         <spring-security-jwt.version>1.0.10.RELEASE</spring-security-jwt.version>
@@ -18,6 +19,7 @@
         <dependency>
             <groupId>org.hzero.starter</groupId>
             <artifactId>hzero-starter-core</artifactId>
+            <version>1.4.7.RELEASE</version>
         </dependency>
         <dependency>
             <groupId>javax.servlet</groupId>

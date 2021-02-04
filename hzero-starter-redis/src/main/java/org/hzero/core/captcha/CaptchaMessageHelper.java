@@ -1,15 +1,16 @@
 package org.hzero.core.captcha;
 
+import static org.hzero.core.base.BaseConstants.Symbol.COLON;
+
+import java.util.concurrent.TimeUnit;
+
 import org.apache.commons.lang3.StringUtils;
+
 import org.hzero.core.base.BaseConstants;
 import org.hzero.core.message.MessageAccessor;
 import org.hzero.core.redis.RedisHelper;
 import org.hzero.core.user.UserType;
 import org.hzero.core.util.Regexs;
-
-import java.util.concurrent.TimeUnit;
-
-import static org.hzero.core.base.BaseConstants.Symbol.COLON;
 
 /**
  * 短信/邮箱验证码发送、校验
@@ -623,7 +624,7 @@ public class CaptchaMessageHelper {
         }
 
         // 校验发送验证码时的手机号与修改的手机号是否一致
-        if (number != null && !StringUtils.equals(groupArr[1], number)) {
+        if (number != null && !StringUtils.equalsAnyIgnoreCase(groupArr[1], number)) {
             result.setSuccess(false);
             result.setCode("captcha.validate.number-not-match");
             result.setMessage(MessageAccessor.getMessage("captcha.validate.number-not-match", new Object[]{number}).desc());

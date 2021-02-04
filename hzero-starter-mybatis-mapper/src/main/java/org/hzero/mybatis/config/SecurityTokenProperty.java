@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "hzero.mybatis-mapper")
 public class SecurityTokenProperty {
-    private String securityKey = "aSufzsPO1g/oGVr9MSyJqw==";
+    private String securityKey = "UFvAgyz2bmPMeBzo3nPG/A==";
 
     public String getSecurityKey() {
         return securityKey;

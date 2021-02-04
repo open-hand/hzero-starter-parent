@@ -248,7 +248,7 @@ public class PermissionActuatorStrategy implements ActuatorStrategy, Application
         }
 
         // 处理Controller内部的方法
-        for (Method method : clazz.getDeclaredMethods()) {
+        for (Method method : clazz.getMethods()) {
             this.parseMethod(serviceName, method, resourceCode, controllerPaths);
         }
 

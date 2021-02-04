@@ -1,13 +1,19 @@
 package org.hzero.export;
 
-import io.choerodon.core.oauth.CustomUserDetails;
-import io.choerodon.core.oauth.DetailsHelper;
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.*;
+import java.util.stream.Collectors;
+
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.formula.functions.T;
 import org.hzero.common.HZeroService;
+import org.hzero.core.base.BaseConstants;
 import org.hzero.core.helper.LanguageHelper;
+import org.hzero.core.jackson.annotation.IgnoreTimeZone;
 import org.hzero.core.redis.RedisHelper;
 import org.hzero.export.annotation.ExcelColumn;
 import org.hzero.export.annotation.ExcelExport;
@@ -17,17 +23,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.AnnotationUtils;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
+import io.choerodon.core.oauth.CustomUserDetails;
+import io.choerodon.core.oauth.DetailsHelper;
 
 /**
  * excel export column helper
@@ -46,7 +43,8 @@ public class ExportColumnHelper {
 
     private RedisHelper redisHelper;
 
-    public ExportColumnHelper() {}
+    public ExportColumnHelper() {
+    }
 
     public ExportColumnHelper(ExportProperties properties, RedisHelper redisHelper) {
         this.properties = properties;
@@ -55,7 +53,7 @@ public class ExportColumnHelper {
 
     /**
      * 根据导出类获取导出列
-     * 
+     *
      * @param excelExport 导出类
      * @return ExportColumn
      */
@@ -88,10 +86,10 @@ public class ExportColumnHelper {
 
         idLocal.remove();
 
-        if(root != null){
+        if (root != null) {
             root.setEnableAsync(false);
             root.setDefaultRequestMode(null);
-            if(properties != null){
+            if (properties != null) {
                 root.setEnableAsync(properties.getEnableAsync());
                 root.setDefaultRequestMode(properties.getDefaultRequestMode());
             }
@@ -102,12 +100,13 @@ public class ExportColumnHelper {
 
     /**
      * 标记已选择的列
+     *
      * @param excelExport 导出类
-     * @param checkedIds 已选择的列ID
+     * @param checkedIds  已选择的列ID
      */
     public ExportColumn getCheckedExportColumn(ExcelExport excelExport, Set<Long> checkedIds) {
         ExportColumn root = getExportColumn(excelExport);
-        if(!root.isChecked()){
+        if (!root.isChecked()) {
             root.setChecked(checkedIds.contains(root.getId()));
         }
         checkChildren(root, root.getChildren(), checkedIds);
@@ -133,8 +132,9 @@ public class ExportColumnHelper {
 
     /**
      * 获取需要查询的子集
+     *
      * @param excelExport 导出类
-     * @param checkedIds 已选择的列ID
+     * @param checkedIds  已选择的列ID
      * @return 返回类名
      */
     public Set<String> getSelection(ExcelExport excelExport, Set<Long> checkedIds) {
@@ -177,7 +177,7 @@ public class ExportColumnHelper {
             if (field.isAnnotationPresent(ExcelColumn.class)) {
                 ExcelColumn excelColumn = AnnotationUtils.findAnnotation(field, ExcelColumn.class);
                 //preserve NPE
-                if(excelColumn == null){
+                if (excelColumn == null) {
                     continue;
                 }
                 if (!includeGroup(excelColumn.groups(), groups)) {
@@ -197,8 +197,11 @@ public class ExportColumnHelper {
                         child.setOrder(excelColumn.order());
                         child.setName(field.getName());
                         child.setExcelColumn(excelColumn);
-                        //default selected
+                        // default selected
                         child.setChecked(excelColumn.defaultSelected());
+                        if (field.isAnnotationPresent(IgnoreTimeZone.class)) {
+                            child.setIgnoreTimeZone(true);
+                        }
                         children.add(child);
                     }
                 } else {
@@ -208,8 +211,11 @@ public class ExportColumnHelper {
                     column.setType(field.getType().getSimpleName());
                     column.setCode(code + id);
                     column.setExcelColumn(excelColumn);
-                    //default selected
+                    // default selected
                     column.setChecked(excelColumn.defaultSelected());
+                    if (field.isAnnotationPresent(IgnoreTimeZone.class)) {
+                        column.setIgnoreTimeZone(true);
+                    }
                     children.add(column);
                 }
             }
@@ -235,9 +241,14 @@ public class ExportColumnHelper {
     private String getSheetName(Class<?> exportClass, ExcelSheet excelSheet) {
         String title = null;
         if (StringUtils.isNoneBlank(excelSheet.promptKey(), excelSheet.promptCode())) {
+            Long tenantId = BaseConstants.DEFAULT_TENANT_ID;
             CustomUserDetails userDetails = DetailsHelper.getUserDetails();
-            if (userDetails != null && userDetails.getTenantId() != null) {
-                title = redisHelper.hshGet(MULTI_LANGUAGE_PREFIX + excelSheet.promptKey() + "." + LanguageHelper.language() + "." + userDetails.getTenantId(), excelSheet.promptCode());
+            if (userDetails != null) {
+                tenantId = userDetails.getTenantId();
+            }
+            title = redisHelper.hshGet(MULTI_LANGUAGE_PREFIX + excelSheet.promptKey() + "." + LanguageHelper.language() + "." + tenantId, excelSheet.promptCode());
+            if (StringUtils.isBlank(title) && !BaseConstants.DEFAULT_TENANT_ID.equals(tenantId)) {
+                title = redisHelper.hshGet(MULTI_LANGUAGE_PREFIX + excelSheet.promptKey() + "." + LanguageHelper.language() + "." + BaseConstants.DEFAULT_TENANT_ID, excelSheet.promptCode());
             }
         }
         if (StringUtils.isBlank(title)) {
@@ -260,9 +271,14 @@ public class ExportColumnHelper {
         String title = null;
         String promptKey = StringUtils.isNotBlank(excelColumn.promptKey()) ? excelColumn.promptKey() : excelSheet.promptKey();
         if (StringUtils.isNoneBlank(promptKey, excelColumn.promptCode())) {
+            Long tenantId = BaseConstants.DEFAULT_TENANT_ID;
             CustomUserDetails userDetails = DetailsHelper.getUserDetails();
-            if (userDetails != null && userDetails.getTenantId() != null) {
-                title = redisHelper.hshGet(MULTI_LANGUAGE_PREFIX + excelColumn.promptKey() + "." + LanguageHelper.language() + "." + userDetails.getTenantId(), excelColumn.promptCode());
+            if (userDetails != null) {
+                tenantId = userDetails.getTenantId();
+            }
+            title = redisHelper.hshGet(MULTI_LANGUAGE_PREFIX + excelColumn.promptKey() + "." + LanguageHelper.language() + "." + tenantId, excelColumn.promptCode());
+            if (StringUtils.isBlank(title) && !BaseConstants.DEFAULT_TENANT_ID.equals(tenantId)) {
+                title = redisHelper.hshGet(MULTI_LANGUAGE_PREFIX + excelColumn.promptKey() + "." + LanguageHelper.language() + "." + BaseConstants.DEFAULT_TENANT_ID, excelColumn.promptCode());
             }
         }
         if (StringUtils.isBlank(title)) {

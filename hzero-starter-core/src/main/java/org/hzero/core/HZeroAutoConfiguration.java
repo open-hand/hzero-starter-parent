@@ -114,6 +114,7 @@ public class HZeroAutoConfiguration {
      * @return
      */
     @Bean
+    @ConditionalOnProperty(name = "server.servlet.context-path")
     public MetadataEntry contextMetadataEntry(ServerProperties properties) {
         return new MetadataEntry(MetadataEntry.METADATA_CONTEXT, properties.getServlet().getContextPath());
     }

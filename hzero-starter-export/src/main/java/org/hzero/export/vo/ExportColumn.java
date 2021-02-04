@@ -1,11 +1,11 @@
 package org.hzero.export.vo;
 
+import java.io.Serializable;
+import java.util.List;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.hzero.export.annotation.ExcelColumn;
 import org.hzero.export.annotation.ExcelSheet;
-
-import java.io.Serializable;
-import java.util.List;
 
 /**
  * Excel 导出列
@@ -37,6 +37,11 @@ public class ExportColumn implements Serializable {
     private String defaultRequestMode;
 
     private boolean checked;
+
+    /**
+     * 是否忽略时区转换
+     */
+    private boolean ignoreTimeZone = false;
 
     @JsonIgnore
     private boolean hasChildren;
@@ -196,6 +201,15 @@ public class ExportColumn implements Serializable {
         this.excelColumn = excelColumn;
     }
 
+    public boolean isIgnoreTimeZone() {
+        return ignoreTimeZone;
+    }
+
+    public ExportColumn setIgnoreTimeZone(boolean ignoreTimeZone) {
+        this.ignoreTimeZone = ignoreTimeZone;
+        return this;
+    }
+
     @Override
     public String toString() {
         return "ExportColumn{" +
@@ -210,6 +224,7 @@ public class ExportColumn implements Serializable {
                 ", enableAsync=" + enableAsync +
                 ", defaultRequestMode='" + defaultRequestMode + '\'' +
                 ", checked=" + checked +
+                ", ignoreTimeZone=" + ignoreTimeZone +
                 ", hasChildren=" + hasChildren +
                 ", excelSheet=" + excelSheet +
                 ", excelColumn=" + excelColumn +

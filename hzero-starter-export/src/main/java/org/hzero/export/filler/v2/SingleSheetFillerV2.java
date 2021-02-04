@@ -1,28 +1,26 @@
 package org.hzero.export.filler.v2;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.stream.Collectors;
+
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.HorizontalAlignment;
-import org.apache.poi.ss.usermodel.IndexedColors;
-import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.streaming.SXSSFCell;
 import org.apache.poi.xssf.streaming.SXSSFRow;
 import org.apache.poi.xssf.streaming.SXSSFSheet;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
-import org.hzero.export.exporter.ExcelExporter;
+import org.hzero.core.jackson.JacksonConstant;
+import org.hzero.export.entity.Node;
 import org.hzero.export.vo.ExportColumn;
 import org.springframework.util.Assert;
 
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.stream.Collectors;
+import io.choerodon.core.oauth.CustomUserDetails;
+import io.choerodon.core.oauth.DetailsHelper;
 
 /**
  * 单Sheet导出：一种数据类型一个Sheet页
@@ -61,20 +59,19 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
     protected void fillData0(SXSSFSheet sheet, List<?> data) {
         // 处理每行数据
         int rows = 0;
-        for (int i = 0, len = data.size(); i < len; i++) {
-            Assert.isTrue(sheet.getLastRowNum() < ExcelExporter.MAX_ROW, "export.too-many-data");
-
+        for (Object item : data) {
+            Assert.isTrue(sheet.getLastRowNum() < singleSheetMaxRow, "export.too-many-data");
             SXSSFRow row = sheet.createRow(sheet.getLastRowNum() + 1);
-            fillRow(sheet.getWorkbook(), row, getRootExportColumn().getExcelSheet().colOffset(), data.get(i), getRootExportColumn().getChildren());
-            int count = fillChildren(sheet, data.get(i), row.getLastCellNum(), getRootExportColumn());
-            for (int c=1;c < count;c++) {
-                fillRow(sheet.getWorkbook(), sheet.getRow(row.getRowNum()+c), getRootExportColumn().getExcelSheet().colOffset(), data.get(i), getRootExportColumn().getChildren());
-            }
+            int colOffset = getRootExportColumn().getExcelSheet() == null ? 0 : getRootExportColumn().getExcelSheet().colOffset();
+            // 第一级数据
+            Node first = new Node(item, row.getRowNum(), colOffset, getRootExportColumn(), null, null);
+            fillRow(sheet.getWorkbook(), row, colOffset, item, getRootExportColumn().getChildren());
+            int count = fillChildren(first, sheet, item, row.getLastCellNum(), getRootExportColumn());
             rows += count + 1;
-            if (rows >= 100) {
+            if (rows >= ROW_ACCESS_WINDOW_SIZE) {
                 rows = 0;
                 try {
-                    sheet.flushRows(100);
+                    sheet.flushRows(ROW_ACCESS_WINDOW_SIZE);
                 } catch (IOException e) {
                     logger.error("flush rows error.", e);
                 }
@@ -82,7 +79,7 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
         }
     }
 
-    private int fillChildren(SXSSFSheet sheet, Object data, int colOffset, ExportColumn exportClass) {
+    private int fillChildren(Node parentNode, SXSSFSheet sheet, Object data, int colOffset, ExportColumn exportClass) {
         int maxChildDataCount = 0;
         int lastRowNum = sheet.getLastRowNum();
         int rowIndex = lastRowNum;
@@ -92,19 +89,22 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
             List<ExportColumn> childColumns = child.getChildren();
             int checkedCount = countChildrenChecked(child);
             int innerMaxChildCount = 0;
-            for (int i = 0; i < childData.size(); i++) {
-                SXSSFRow row = null;
-                row = sheet.getRow(rowIndex);
+            for (Object childItem : childData) {
+                SXSSFRow row = sheet.getRow(rowIndex);
                 if (row == null) {
                     row = sheet.createRow(rowIndex);
                 }
-                fillRow(sheet.getWorkbook(), row, colOffset, childData.get(i), childColumns);
-                int childCount = fillChildren(sheet, childData.get(i), colOffset + checkedCount, child);
-                for (int c=1;c < childCount;c++) {
-                    fillRow(sheet.getWorkbook(), sheet.getRow(rowIndex + c), colOffset, childData.get(i), childColumns);
+                Node node = new Node(childItem, rowIndex, colOffset, child, parentNode, null);
+                parentNode.setChild(node);
+                // 填充数据
+                fillRow(sheet.getWorkbook(), row, colOffset, childItem, childColumns);
+                // 到达叶子节点，递归填充父级数据
+                if (!hasChildren(childColumns)) {
+                    fillParent(node, sheet.getWorkbook(), row);
                 }
+                int childCount = fillChildren(node, sheet, childItem, colOffset + checkedCount, child);
                 innerMaxChildCount += childCount > 0 ? childCount : 1;
-                rowIndex++;
+                rowIndex = childCount > 0 ? rowIndex + childCount : rowIndex + 1;
             }
             // 重置
             rowIndex = lastRowNum;
@@ -114,6 +114,27 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
             }
         }
         return maxChildDataCount;
+    }
+
+    private boolean hasChildren(List<ExportColumn> columnList) {
+        for (ExportColumn column : columnList) {
+            if (column.hasChildren()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void fillParent(Node node, SXSSFWorkbook workbook, SXSSFRow row) {
+        Node parent = node.pre();
+        if (parent == null) {
+            return;
+        }
+        // 父级数据已经在该行写过的话，就不再写了
+        if (parent.getRowIndex() != row.getRowNum()) {
+            fillRow(workbook, row, parent.getColIndex(), parent.getData(), parent.getExportColumn().getChildren());
+        }
+        fillParent(parent, workbook, row);
     }
 
     private void collectAllTitleColumn(List<ExportColumn> titleColumns, ExportColumn exportClass) {
@@ -144,7 +165,7 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
                     SXSSFCell cell = titleRow.createCell(colOffset);
                     if (i % 2 == 0) {
                         cell.setCellStyle(oddTitleCellStyle);
-                    } else{
+                    } else {
                         cell.setCellStyle(evenTitleCellStyle);
                     }
                     // 值
@@ -152,6 +173,8 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
                     // 宽度
                     setCellWidth(sheet, column.getType(), colOffset, column.getExcelColumn().width());
 
+                    // 设置下拉选项
+                    setOptions(sheet, column, rowOffset + 1, colOffset);
                     colOffset++;
                 }
             }
@@ -168,10 +191,22 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
                 Object cellValue = null;
                 try {
                     cellValue = FieldUtils.readField(rowData, column.getName(), true);
+                    // 日期类型需要进行时区转换
+                    if (cellValue instanceof Date) {
+                        SimpleDateFormat dateFormatGmt = new SimpleDateFormat(StringUtils.isBlank(column.getExcelColumn().pattern()) ? JacksonConstant.DEFAULT_DATE_FORMAT : column.getExcelColumn().pattern());
+                        if (!column.isIgnoreTimeZone()) {
+                            CustomUserDetails details = DetailsHelper.getUserDetails();
+                            if (details != null && details.getTimeZone() != null) {
+                                dateFormatGmt.setTimeZone(TimeZone.getTimeZone(details.getTimeZone()));
+                            }
+                        }
+                        cellValue = dateFormatGmt.format(cellValue);
+                    }
                 } catch (Exception ev) {
                     logger.error("get value error.", ev);
                 }
                 SXSSFCell cell = row.createCell(colOffset + cells);
+                int index = colOffset + cells;
                 fillCellValue(workbook, cell, cellValue, rowData, column.getExcelColumn(), false);
                 cells++;
             }
@@ -201,7 +236,7 @@ public class SingleSheetFillerV2 extends ExcelFillerV2 {
             if (method.getName().equalsIgnoreCase(getter)) {
                 try {
                     method.setAccessible(true);
-                    return (List<Object>) method.invoke(data) == null?Collections.emptyList():(List<Object>) method.invoke(data);
+                    return (List<Object>) method.invoke(data) == null ? Collections.emptyList() : (List<Object>) method.invoke(data);
                 } catch (Exception e) {
                     logger.error("get child data error.", e);
                 }

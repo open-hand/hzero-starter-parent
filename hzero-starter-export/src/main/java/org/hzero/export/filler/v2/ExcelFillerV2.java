@@ -1,31 +1,33 @@
 package org.hzero.export.filler.v2;
 
-import io.choerodon.core.exception.CommonException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Comment;
-import org.apache.poi.ss.usermodel.DataFormat;
-import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.HorizontalAlignment;
-import org.apache.poi.ss.usermodel.IndexedColors;
-import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddressList;
 import org.apache.poi.xssf.streaming.SXSSFCell;
 import org.apache.poi.xssf.streaming.SXSSFDrawing;
 import org.apache.poi.xssf.streaming.SXSSFSheet;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFDataValidation;
 import org.apache.poi.xssf.usermodel.XSSFRichTextString;
+import org.hzero.boot.platform.lov.adapter.LovAdapter;
+import org.hzero.boot.platform.lov.dto.LovValueDTO;
+import org.hzero.core.base.BaseConstants;
+import org.hzero.core.util.Pair;
 import org.hzero.core.util.SecurityUtils;
 import org.hzero.export.IExcelFiller;
-import org.hzero.export.annotation.CommentProperty;
-import org.hzero.export.annotation.EmptyColor;
-import org.hzero.export.annotation.EmptyComment;
-import org.hzero.export.annotation.EmptyFont;
-import org.hzero.export.annotation.ExcelColumn;
-import org.hzero.export.exporter.ExcelExporter;
+import org.hzero.export.annotation.*;
 import org.hzero.export.filler.ExcelFiller;
 import org.hzero.export.render.ValueRenderer;
 import org.hzero.export.vo.ExportColumn;
@@ -33,18 +35,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
+import io.choerodon.core.convertor.ApplicationContextHelper;
+import io.choerodon.core.exception.CommonException;
+import io.choerodon.core.oauth.CustomUserDetails;
+import io.choerodon.core.oauth.DetailsHelper;
 
 /**
  * Excel 数据填充器V2
@@ -53,10 +47,15 @@ import java.util.regex.Pattern;
  */
 public abstract class ExcelFillerV2 implements IExcelFiller {
 
-    private Map<Class<? extends ValueRenderer>, ValueRenderer> renderers = new ConcurrentHashMap<>();
-    private Map<ExcelColumn, CellStyle> styleMap = new ConcurrentHashMap<>();
-    private Map<ExcelColumn, Font> fontMap = new ConcurrentHashMap<>();
-    private Map<ExcelColumn, Comment> commentMap = new ConcurrentHashMap<>();
+    /**
+     * SXSS的缓存窗口值
+     */
+    protected static final int ROW_ACCESS_WINDOW_SIZE = 100;
+
+    private final Map<Class<? extends ValueRenderer>, ValueRenderer> renderers = new ConcurrentHashMap<>();
+    private final Map<Pair<ExcelColumn, SXSSFWorkbook>, CellStyle> styleMap = new ConcurrentHashMap<>();
+    private final Map<Pair<ExcelColumn, SXSSFWorkbook>, Font> fontMap = new ConcurrentHashMap<>();
+    private final Map<Pair<ExcelColumn, SXSSFWorkbook>, Comment> commentMap = new ConcurrentHashMap<>();
     private volatile DataFormat dataFormat;
 
     private ZoneId zoneId = ZoneId.systemDefault();
@@ -80,11 +79,11 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
     /**
      * 单个sheet页的最大记录数
      */
-    private Integer singleSheetMaxRow = ExcelExporter.MAX_ROW;
+    protected Integer singleSheetMaxRow = 1000000;
     /**
      * 单个excel的最大记录数
      */
-    private Integer singleExcelMaxRow = singleSheetMaxRow * singleSheetMaxRow;
+    private Integer singleExcelMaxRow = singleExcelMaxSheetNum * singleSheetMaxRow;
 
     private int remainCapacityOfExcel;
     private int remainCapacityOfSheet;
@@ -95,7 +94,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
     public ExcelFillerV2(ExportColumn root) {
         this.root = root;
         String title = StringUtils.defaultIfBlank(getRootExportColumn().getTitle(), getRootExportColumn().getName());
-        this.sheetNamePattern = Pattern.compile(title + "-[1-9]");
+        this.sheetNamePattern = Pattern.compile(title + "-[0-9]+");
     }
 
     @Override
@@ -113,14 +112,13 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
 
     /**
      * 创建标题
-     *
      */
     public abstract void createSheetAndTitle0(SXSSFWorkbook workbook);
 
     @Override
     public void fillTitle() {
-        if (workbooks.size() == 0) {
-            workbooks.add(new SXSSFWorkbook());
+        if (CollectionUtils.isEmpty(workbooks)) {
+            workbooks.add(new SXSSFWorkbook(ROW_ACCESS_WINDOW_SIZE));
         }
         createSheetAndTitle0(workbooks.get(0));
     }
@@ -128,7 +126,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
     /**
      * 填充数据, 自动扩容，自动填充标题
      *
-     * @param data     数据
+     * @param data 数据
      */
     @Override
     public void fillData(List<?> data) {
@@ -154,11 +152,11 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
             }
         }
         if (append > oldRemainCapacityOfSheet) {
-            sheetIndex = sheetIndex + (int) Math.floor((double)(append - oldRemainCapacityOfSheet) / singleSheetMaxRow);
+            sheetIndex = sheetIndex + (int) Math.floor((double) (append - oldRemainCapacityOfSheet) / singleSheetMaxRow);
         } else if (append == oldRemainCapacityOfSheet && append > 0) {
             sheetIndex = sheetIndex + 1;
         }
-        workbookIndex = workbookIndex + (int) Math.floor((double)sheetIndex / singleExcelMaxSheetNum);
+        workbookIndex = workbookIndex + (int) Math.floor((double) sheetIndex / singleExcelMaxSheetNum);
         sheetIndex = sheetIndex % singleExcelMaxSheetNum;
     }
 
@@ -249,7 +247,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
 
     private void excelExpansion(int append) {
         for (int i = 0; i < append; i++) {
-            workbooks.add(new SXSSFWorkbook());
+            workbooks.add(new SXSSFWorkbook(ROW_ACCESS_WINDOW_SIZE));
         }
     }
 
@@ -266,8 +264,8 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
     /**
      * 填充数据
      *
-     * @param sheet    导出sheet
-     * @param data     数据
+     * @param sheet 导出sheet
+     * @param data  数据
      */
     protected abstract void fillData0(SXSSFSheet sheet, List<?> data);
 
@@ -279,9 +277,9 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
     /**
      * 填充单元格
      *
-     * @param cell      SXSSFCell
-     * @param value     数据
-     * @param rowData   行数据
+     * @param cell        SXSSFCell
+     * @param value       数据
+     * @param rowData     行数据
      * @param excelColumn 行数据配置属性
      */
     protected void fillCellValue(SXSSFWorkbook workbook, SXSSFCell cell, Object value, Object rowData, ExcelColumn excelColumn, boolean isTitle) {
@@ -325,7 +323,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
         CellStyle s = getCellStyle(workbook, excelColumn, isTitle);
         //标题无需添加注释
         if (!isTitle && comment != null) {
-            setComment(cell, comment, excelColumn);
+            setComment(workbook, cell, comment, excelColumn);
         }
         cell.setCellStyle(s);
 
@@ -336,7 +334,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
         if (isTitle) {
             return createCellStyle(workbook, excelColumn, true);
         }
-        return styleMap.computeIfAbsent(excelColumn, column -> {
+        return styleMap.computeIfAbsent(Pair.of(excelColumn, workbook), column -> {
             CellStyle columnCellStyle = createCellStyle(workbook, excelColumn, false);
             String pattern = excelColumn == null ? null : excelColumn.pattern();
             if (StringUtils.isNotBlank(pattern)) {
@@ -375,7 +373,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
         if (font instanceof EmptyFont) {
             return;
         }
-        style.setFont(font.getFont(fontMap.computeIfAbsent(excelColumn, column -> workbook.createFont())));
+        style.setFont(font.getFont(fontMap.computeIfAbsent(Pair.of(excelColumn, workbook), column -> workbook.createFont())));
     }
 
     private org.hzero.export.annotation.Font getFontInstance(Class<? extends org.hzero.export.annotation.Font> fontClass) {
@@ -424,7 +422,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
         }
     }
 
-    private void setComment(SXSSFCell cell, Class<? extends org.hzero.export.annotation.Comment> commentClass, ExcelColumn excelColumn) {
+    private void setComment(SXSSFWorkbook workbook, SXSSFCell cell, Class<? extends org.hzero.export.annotation.Comment> commentClass, ExcelColumn excelColumn) {
         org.hzero.export.annotation.Comment comment = getCommentInstance(commentClass);
         if (comment instanceof EmptyComment) {
             return;
@@ -432,7 +430,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
         CommentProperty commentProperty = comment.getComment();
         if (cell.getCellComment() == null) {
             SXSSFDrawing p = cell.getSheet().createDrawingPatriarch();
-            Comment commentValue = commentMap.computeIfAbsent(excelColumn, column -> {
+            Comment commentValue = commentMap.computeIfAbsent(Pair.of(excelColumn, workbook), column -> {
                 Comment c = p.createCellComment(new XSSFClientAnchor(0, 0, 0, 0, cell.getColumnIndex(), cell.getRowIndex(), cell.getColumnIndex() + 2, cell.getRowIndex() + 2));
                 c.setString(new XSSFRichTextString(commentProperty.getComment()));
                 c.setAuthor(commentProperty.getAuthor());
@@ -484,7 +482,7 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
         }
         sheet.setColumnWidth(columnIndex, columnWidth);
         if (customWidth != 0) {
-            sheet.setColumnWidth(columnIndex, (int)(255.86 * customWidth + 184.27));
+            sheet.setColumnWidth(columnIndex, (int) (255.86 * customWidth + 184.27));
         }
     }
 
@@ -534,5 +532,67 @@ public abstract class ExcelFillerV2 implements IExcelFiller {
 
     protected SXSSFWorkbook getCurrentWorkbook() {
         return workbooks.get(workbookIndex);
+    }
+
+
+    /**
+     * 设置下拉选项
+     *
+     * @param sheet    sheet
+     * @param column   列信息
+     * @param startRow 起始行下标
+     * @param colIndex 列下表
+     */
+    protected void setOptions(SXSSFSheet sheet, ExportColumn column, int startRow, int colIndex) {
+        String lovCode = column.getExcelColumn().lovCode();
+        if (StringUtils.isBlank(lovCode)) {
+            return;
+        }
+        LovAdapter lovAdapter;
+        try {
+            lovAdapter = ApplicationContextHelper.getContext().getBean(LovAdapter.class);
+        } catch (Exception e) {
+            return;
+        }
+        Long tenantId = BaseConstants.DEFAULT_TENANT_ID;
+        CustomUserDetails userDetails = DetailsHelper.getUserDetails();
+        if (userDetails != null) {
+            tenantId = userDetails.getTenantId();
+        }
+        String[] options = getLovValue(tenantId, lovCode, lovAdapter);
+        if (options.length == 0) {
+            return;
+        }
+        // 加载下拉列表内容
+        DataValidationHelper helper = sheet.getDataValidationHelper();
+        CellRangeAddressList cellRangeAddressList = new CellRangeAddressList(startRow, singleSheetMaxRow, colIndex, colIndex);
+        DataValidationConstraint constraint = helper.createExplicitListConstraint(options);
+        DataValidation dataValidation = helper.createValidation(constraint, cellRangeAddressList);
+        // 处理Excel兼容性问题
+        if (dataValidation instanceof XSSFDataValidation) {
+            dataValidation.setSuppressDropDownArrow(true);
+            dataValidation.setShowErrorBox(true);
+        } else {
+            dataValidation.setSuppressDropDownArrow(false);
+        }
+        sheet.addValidationData(dataValidation);
+    }
+
+    /**
+     * 获取值集meaning集合
+     *
+     * @param tenantId   租户
+     * @param lovCode    值集编码
+     * @param lovAdapter lovAdapter
+     * @return 值集meaning集合
+     */
+    private String[] getLovValue(Long tenantId, String lovCode, LovAdapter lovAdapter) {
+        List<LovValueDTO> lovValueList = lovAdapter.queryLovValue(lovCode, tenantId);
+        if (CollectionUtils.isEmpty(lovValueList)) {
+            return new String[0];
+        }
+        String[] lovValues = new String[lovValueList.size()];
+        lovValueList.stream().map(LovValueDTO::getMeaning).distinct().collect(Collectors.toList()).toArray(lovValues);
+        return lovValues;
     }
 }

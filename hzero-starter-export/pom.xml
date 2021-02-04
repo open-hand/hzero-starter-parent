@@ -9,9 +9,16 @@
         <version>1.4.0.RELEASE</version>
     </parent>
     <artifactId>hzero-starter-export</artifactId>
-    <version>1.4.1.RELEASE</version>
+    <version>1.4.5.RELEASE</version>
 
     <dependencies>
+        <!-- 获取值集值需要 -->
+        <dependency>
+            <groupId>org.hzero.boot</groupId>
+            <artifactId>hzero-boot-platform</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.hzero.starter</groupId>
             <artifactId>hzero-starter-core</artifactId>

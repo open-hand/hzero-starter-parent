@@ -31,6 +31,10 @@ public class CoreProperties {
         private String pattern = "/v1/*";
 
         private String skipPath = "/v2/choerodon/api-docs";
+        /**
+         * 认证头名称
+         */
+        private String authHeaderName = "Authorization";
 
         public String getPattern() {
             return pattern;
@@ -46,6 +50,14 @@ public class CoreProperties {
 
         public void setSkipPath(String skipPath) {
             this.skipPath = skipPath;
+        }
+
+        public String getAuthHeaderName() {
+            return authHeaderName;
+        }
+
+        public void setAuthHeaderName(String authHeaderName) {
+            this.authHeaderName = authHeaderName;
         }
     }
 

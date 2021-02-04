@@ -1,14 +1,10 @@
 package org.hzero.export.annotation;
 
+import java.lang.annotation.*;
+
 import org.hzero.core.base.BaseConstants;
 import org.hzero.export.render.ValueRenderer;
 import org.springframework.core.annotation.AliasFor;
-
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
 
 /**
  * Excel Column 标注导出字段 <p></p>
@@ -55,6 +51,7 @@ public @interface ExcelColumn {
 
     /**
      * 多语言KEY 根据 key & code 获取多语言
+     *
      * @see #promptCode
      * @see #title
      */
@@ -62,6 +59,7 @@ public @interface ExcelColumn {
 
     /**
      * 多语言CODE 根据 key & code 获取多语言
+     *
      * @see #promptKey
      * @see #title
      */
@@ -138,4 +136,8 @@ public @interface ExcelColumn {
      */
     boolean defaultSelected() default false;
 
+    /**
+     * 值集编码
+     */
+    String lovCode() default "";
 }

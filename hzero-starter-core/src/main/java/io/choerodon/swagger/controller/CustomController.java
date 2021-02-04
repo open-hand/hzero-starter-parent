@@ -1,12 +1,9 @@
 package io.choerodon.swagger.controller;
 
-import static com.google.common.base.Strings.isNullOrEmpty;
-import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
-import static org.springframework.util.StringUtils.*;
-
-import java.util.Optional;
-import javax.servlet.http.HttpServletRequest;
-
+import io.choerodon.swagger.swagger.CustomSwagger;
+import io.choerodon.swagger.swagger.ForwardedHeader;
+import io.choerodon.swagger.swagger.extra.ExtraData;
+import io.choerodon.swagger.swagger.extra.ExtraDataInitialization;
 import io.swagger.models.Swagger;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,10 +23,14 @@ import springfox.documentation.spring.web.json.JsonSerializer;
 import springfox.documentation.spring.web.plugins.Docket;
 import springfox.documentation.swagger2.mappers.ServiceModelToSwagger2Mapper;
 
-import io.choerodon.swagger.swagger.CustomSwagger;
-import io.choerodon.swagger.swagger.ForwardedHeader;
-import io.choerodon.swagger.swagger.extra.ExtraData;
-import io.choerodon.swagger.swagger.extra.ExtraDataInitialization;
+import javax.servlet.http.HttpServletRequest;
+import java.util.Optional;
+
+import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.util.StringUtils.commaDelimitedListToStringArray;
+import static org.springframework.util.StringUtils.hasText;
+import static org.springframework.util.StringUtils.split;
 
 /**
  * @author wuguokai
@@ -132,8 +133,11 @@ public class CustomController {
 
             assert hostAndPort != null;
             builder.host(hostAndPort[0]);
-            builder.port(Integer.parseInt(hostAndPort[1]));
-
+            try {
+                builder.port(Integer.parseInt(hostAndPort[1]));
+            } catch (NumberFormatException e) {
+                builder.port(-1);
+            }
         } else {
             builder.host(hostToUse);
             builder.port(-1); // reset port if it was forwarded from default port
@@ -142,7 +146,11 @@ public class CustomController {
         String port = request.getHeader("X-Forwarded-Port");
 
         if (hasText(port)) {
-            builder.port(Integer.parseInt(port));
+            try {
+                builder.port(Integer.parseInt(port));
+            } catch (NumberFormatException e) {
+                builder.port(-1);
+            }
         }
 
         return builder.build();

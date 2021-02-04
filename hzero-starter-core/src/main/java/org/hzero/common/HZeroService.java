@@ -212,7 +212,7 @@ public final class HZeroService {
             PORT = port;
         }
 
-        @Value("${hzero.service.swagger.redis-db:4}")
+        @Value("${hzero.service.swagger.redis-db:1}")
         public void setRedisDb(Integer redisDb) {
             REDIS_DB = redisDb;
         }

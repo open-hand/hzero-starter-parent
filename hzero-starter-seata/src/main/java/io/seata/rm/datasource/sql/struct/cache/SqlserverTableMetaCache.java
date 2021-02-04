@@ -69,7 +69,10 @@ public class SqlserverTableMetaCache extends AbstractTableMetaCache {
         try{
             String schemaName = getSchemaName(connection);
             String catalogName = getCatalogName(connection);
-            Statement stmt = connection.createStatement();
+            // The statement that the resultset belongs to was created with the ResultSet.TYPE_SCROLL_INSENSITIVE, or ResultSet.TYPE_SCROLL_SENSITIVE parameters.
+            // – The full table or view name will be returned
+            // https://social.msdn.microsoft.com/Forums/sqlserver/en-US/55e8cbb2-b11c-446e-93ab-dc30658caf99/resultsetmetadatagettablename-returns-quotquot-instead-of-table-name?forum=sqldataaccess
+            Statement stmt = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
             ResultSet rs = stmt.executeQuery(sql);
             return resultSetMetaToSchema(schemaName, catalogName, rs.getMetaData(), connection.getMetaData());
         }

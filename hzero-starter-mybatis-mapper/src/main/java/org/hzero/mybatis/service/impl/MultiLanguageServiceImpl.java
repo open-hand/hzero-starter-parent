@@ -1,12 +1,10 @@
 package org.hzero.mybatis.service.impl;
 
-import java.util.*;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
-
+import io.choerodon.core.exception.CommonException;
 import io.choerodon.mybatis.domain.EntityTable;
 import io.choerodon.mybatis.helper.EntityHelper;
 import io.choerodon.mybatis.helper.LanguageHelper;
+import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.hzero.core.util.FieldNameUtils;
 import org.hzero.mybatis.domian.Language;
@@ -19,6 +17,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
+
+import java.util.*;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -40,25 +42,27 @@ public class MultiLanguageServiceImpl implements MultiLanguageService {
     @Override
     public List<MultiLanguage> listMultiLanguage(String className, String fieldName, Map<String, Object> pkValue) {
         try {
-            Class clazz = Class.forName(className);
+            Class<?> clazz = Class.forName(className);
             EntityTable entityTable = EntityHelper.getTableByEntity(clazz);
             if (!entityTable.isMultiLanguage()) {
-                throw new RuntimeException(entityTable.getName() + " hasn't multi-language!");
+                throw new CommonException(entityTable.getName() + " hasn't multi-language!");
             }
             Set<String> multiLanguageColumn = entityTable.getMultiLanguageColumns().stream().map(item -> item.getColumn().toLowerCase()).collect(Collectors.toSet());
             final String columnName = FieldNameUtils.camel2Underline(fieldName, false);
             if (!multiLanguageColumn.contains(columnName)) {
-                throw new RuntimeException("Unknown column " + columnName + " in multi language table " + entityTable.getMultiLanguageTableName());
+                throw new CommonException("Unknown column " + columnName + " in multi language table " + entityTable.getMultiLanguageTableName());
             }
             List<String> pkCondition = new ArrayList<>();
             pkValue.forEach((key, value) -> pkCondition.add(FieldNameUtils.camel2Underline(key, false) + " = " + (value instanceof Number ? value : "'" + value + "'")));
             String executeSql = "SELECT \n" + "LANG,\n" + columnName + " AS VALUE\n" + "FROM " + entityTable.getMultiLanguageTableName() + "\nWHERE " + StringUtils.collectionToDelimitedString(pkCondition, " AND ");
             logger.debug(">>> Multi Language Select : {}", executeSql);
-            return multiLanguage(new DefaultDynamicSqlMapper(sqlSessionFactory.openSession()).selectList(executeSql)
-                    .stream()
-                    .collect(Collector.of(HashMap::new, (map, entity) -> map.put(String.valueOf(entity.get("LANG")), entity.containsKey("VALUE") ? String.valueOf(entity.get("VALUE")) : null), (k, v) -> v, Collector.Characteristics.IDENTITY_FINISH)));
+            try (SqlSession sqlSession = sqlSessionFactory.openSession()) {
+                return multiLanguage(new DefaultDynamicSqlMapper(sqlSession).selectList(executeSql)
+                        .stream()
+                        .collect(Collector.of(HashMap::new, (map, entity) -> map.put(String.valueOf(entity.get("LANG")), entity.containsKey("VALUE") ? String.valueOf(entity.get("VALUE")) : null), (k, v) -> v, Collector.Characteristics.IDENTITY_FINISH)));
+            }
         } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
+            throw new CommonException(e);
         }
     }
 

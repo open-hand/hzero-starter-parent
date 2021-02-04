@@ -56,6 +56,7 @@
     var injectDom = $('#_dataInject');
     var injectData = {
         // 公共
+        authHeaderName: injectDom.data('authHeaderName'),
         accessToken: injectDom.data('accesstoken'),
         organizationId: injectDom.data('organizationid'),
         gatewayPath: injectDom.data('gatewaypath'),
@@ -69,6 +70,9 @@
         // // 参数
         // args: [[${args}]]
     };
+    var authHeader = {}
+    authHeader[injectData.authHeaderName] = injectData.accessToken;
+
     // 设置api
     var apiCheck = injectData.gatewayPath
         + '/v1/'
@@ -93,7 +97,7 @@
             xhr
             // , settings
         ) {
-            xhr.setRequestHeader('Authorization', 'Bearer ' + injectData.accessToken);
+            xhr.setRequestHeader(injectData.authHeaderName, 'Bearer ' + injectData.accessToken);
             // if ($.type(settings.data) === 'string') {
             //     settings.data += extraDataStr;
             // } else if ($.type(settings.data) === 'object') {
@@ -216,9 +220,7 @@
         threads: 3,//上传并发数。允许同时最大上传进程数。
         // 不压缩image, 默认如果是jpeg，文件上传前会压缩一把再上传！
         resize: false,
-        headers: {
-            Authorization: 'Bearer ' + injectData.accessToken
-        },
+        headers: authHeader,
     });
     // 当有文件被添加进队列的时候
     uploader.on('fileQueued', function (file) {
