@@ -35,7 +35,6 @@
 * Excel操作组件：[hzero-starter-excel](./hzero-starter-excel/README.md)
 * 文件分片组件：[hzero-starter-fragment](./hzero-starter-fragment/README.md)
 * SQL解析器组件：[hzero-starter-sqlparser](./hzero-starter-sqlparser/README.md)
-* 主键加密组件：[hzero-starter-keyencrypt](./hzero-starter-keyencrypt/README.md)
 * Seata开发组件：[hzero-starter-seata](./hzero-starter-seata/README.md)
 
 ## Contributing
